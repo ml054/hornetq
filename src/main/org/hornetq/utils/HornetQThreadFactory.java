@@ -20,9 +20,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.hornetq.core.logging.Logger;
 
 /**
- * 
+ *
  * A HornetQThreadFactory
- * 
+ *
  * @author <a href="mailto:tim.fox@jboss.com">Tim Fox</a>
  *
  */
@@ -37,7 +37,7 @@ public class HornetQThreadFactory implements ThreadFactory
    private final int threadPriority;
 
    private final boolean daemon;
-   
+
    private final ClassLoader tccl;
 
    public HornetQThreadFactory(final String groupName, final boolean daemon, final ClassLoader tccl)
@@ -50,7 +50,7 @@ public class HornetQThreadFactory implements ThreadFactory
       group = new ThreadGroup(groupName + "-" + System.identityHashCode(this));
 
       this.threadPriority = threadPriority;
-      
+
       this.tccl = tccl;
 
       this.daemon = daemon;
@@ -58,44 +58,18 @@ public class HornetQThreadFactory implements ThreadFactory
 
    public Thread newThread(final Runnable command)
    {
-      final Thread t;
-      // attach the thread to a group only if there is no security manager:
-      // when sandboxed, the code does not have the RuntimePermission modifyThreadGroup
-      if (System.getSecurityManager() == null)
+      // always create a thread in a privileged block.
+      return AccessController.doPrivileged(new PrivilegedAction<Thread>()
       {
-         t = new Thread(group, command, "Thread-" + threadCount.getAndIncrement() + " (" + group.getName() + ")");
-      }
-      else
-      {
-         t = new Thread(command, "Thread-" + threadCount.getAndIncrement());
-      }
-      
-      AccessController.doPrivileged(new PrivilegedAction<Object>()
-      {
-         public Object run()
+         public Thread run()
          {
+            final Thread t = new Thread(group, command, "Thread-" + threadCount.getAndIncrement() + " (" + group.getName() + ")");
             t.setDaemon(daemon);
             t.setPriority(threadPriority);
-            return null;
+            t.setContextClassLoader(tccl);
+
+            return t;
          }
       });
-        
-      try
-      {
-         AccessController.doPrivileged(new PrivilegedAction<Object>()
-         {
-            public Object run()
-            {
-               t.setContextClassLoader(tccl);
-               return null;
-            }
-         });
-      }
-      catch (java.security.AccessControlException e)
-      {
-         log.warn("Missing privileges to set Thread Context Class Loader on Thread Factory. Using current Thread Context Class Loader");
-      }
-
-      return t;
    }
 }
